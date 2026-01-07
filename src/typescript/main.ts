@@ -35,7 +35,7 @@ function main(): void
     const levelEditorScreen = new LevelEditorScreen(ctx);
     let level: Level | string;
     let player: Player;
-    function render(now: number)
+    function render()
     {
         switch (gameState)
         {
