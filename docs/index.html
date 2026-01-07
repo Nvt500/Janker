@@ -1,0 +1,1851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Janker</title>
+</head>
+<body>
+  <canvas id="canvas" width="1280px" height="720px" style="border: 2px solid black;"></canvas>
+  <script>
+    // File: interfaces/entity.ts
+
+    "use strict";
+    class Entity {
+      constructor(_centerX, _centerY) {
+        this._centerX = _centerX;
+        this._centerY = _centerY;
+      }
+      get centerX() { return this._centerX; }
+      get centerY() { return this._centerY; }
+    }
+
+
+
+    // File: interfaces/drawable.ts
+
+    "use strict";
+
+
+
+    // File: util/context.ts
+
+    "use strict";
+    class DrawingContext2D {
+      constructor(ctx, _fillStyle) {
+        this.ctx = ctx;
+        this._fillStyle = _fillStyle;
+        this.xOffset = 0;
+        this.yOffset = 0;
+        this.font = "Arial";
+        ctx.font = "20px " + this.font;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+      }
+      set fillStyle(style) {
+        this._fillStyle = style;
+        this.ctx.fillStyle = this._fillStyle;
+      }
+      set fontSize(size) {
+        this.ctx.font = size + "px " + this.font;
+      }
+      set textAlign(style) {
+        this.ctx.textAlign = style;
+      }
+      set textFont(font) {
+        this.font = font;
+      }
+      fillRect(x, y, width, height) {
+        this.ctx.fillRect(x + this.xOffset, y + this.yOffset, width, height);
+      }
+      fillCircle(x, y, radius) {
+        this.ctx.beginPath();
+        this.ctx.arc(x + this.xOffset, y + this.yOffset, radius, 0, 2 * Math.PI);
+        this.ctx.fill();
+      }
+      fillText(text, x, y, fontSize) {
+        if (fontSize !== undefined)
+          this.ctx.font = fontSize + "px " + this.font;
+        this.ctx.fillText(text, x + this.xOffset, y + this.yOffset);
+      }
+      clearRect(x, y, width, height) {
+        this.ctx.clearRect(x, y, width, height);
+      }
+    }
+
+
+
+    // File: objects/text.ts
+
+    "use strict";
+    class GameText {
+      constructor(_text, x, y) {
+        this._text = _text;
+        this.x = x;
+        this.y = y;
+      }
+      draw(ctx) {
+        ctx.fillStyle = "black";
+        ctx.fillText(this._text, this.x, this.y);
+      }
+      set text(t) {
+        this._text = t;
+      }
+    }
+
+
+
+    // File: interfaces/rect.ts
+
+    "use strict";
+    class Rect extends Entity {
+      constructor(_x, _y, _width, _height) {
+        super(_x + _width / 2, _y + _height / 2);
+        this._x = _x;
+        this._y = _y;
+        this._width = _width;
+        this._height = _height;
+      }
+      get x() { return this._x; }
+      get y() { return this._y; }
+      get width() { return this._width; }
+      get height() { return this._height; }
+      set x(x) {
+        this._x = x;
+        this._centerX = this._x + this._width / 2;
+      }
+      set y(y) {
+        this._y = y;
+        this._centerY = this._y + this._height / 2;
+      }
+      set width(w) {
+        this._width = w;
+        this._centerX = this._x + this._width / 2;
+      }
+      set height(h) {
+        this._height = h;
+        this._centerY = this._y + this._height / 2;
+      }
+    }
+
+
+
+    // File: interfaces/circle.ts
+
+    "use strict";
+    class Circle extends Entity {
+      constructor(centerX, centerY, _radius) {
+        super(centerX, centerY);
+        this._radius = _radius;
+      }
+      get radius() { return this._radius; }
+    }
+
+
+
+    // File: interfaces/collidable.ts
+
+    "use strict";
+    class CollidableRect extends Rect {
+      collidesWith(other) {
+        if (other instanceof CollidableRect) {
+          return CollisionHelper.rectCollidesWithRect(this, other);
+        }
+        else if (other instanceof CollidableCircle) {
+          return CollisionHelper.rectCollidesWithCircle(this, other);
+        }
+        else {
+          throw Error(`Other (${other}) cannot be collided with.`);
+        }
+      }
+    }
+    class CollidableCircle extends Circle {
+      collidesWith(other) {
+        if (other instanceof CollidableCircle) {
+          return CollisionHelper.circleCollidesWithCircle(this, other);
+        }
+        else if (other instanceof CollidableRect) {
+          return CollisionHelper.rectCollidesWithCircle(other, this);
+        }
+        else {
+          throw Error(`Other (${other}) cannot be collided with.`);
+        }
+      }
+    }
+    class CollisionHelper {
+      static rectCollidesWithRect(rect1, rect2) {
+        return rect1.x < rect2.x + rect2.width &&
+                rect1.x + rect1.width > rect2.x &&
+                rect1.y < rect2.y + rect2.height &&
+                rect1.y + rect1.height > rect2.y;
+      }
+      // Yeah, I don't think this works btw...
+      static rectCollidesWithCircle(rect, circle) {
+        let testX = circle.centerX;
+        let testY = circle.centerY;
+        if (circle.centerX < rect.x)
+          testX = rect.x;
+        else if (circle.centerX > rect.x + rect.width)
+          testX = rect.x + rect.width;
+        if (circle.centerY < rect.y)
+          testY = rect.y;
+        else if (circle.centerY > rect.y + rect.height)
+          testX = rect.y + rect.height;
+        return Math.sqrt((circle.centerX - testX) ** 2 +
+                (circle.centerY - testY) ** 2) <= circle.radius;
+      }
+      static circleCollidesWithCircle(circle1, circle2) {
+        return Math.sqrt((circle1.centerX - circle2.centerX) ** 2 +
+                        (circle1.centerY - circle2.centerY) ** 2) <
+                circle1.radius + circle2.radius;
+      }
+    }
+
+
+
+    // File: util/camera.ts
+
+    "use strict";
+    class Camera extends Entity {
+      static fromRect(entity) {
+        const cam = new Camera(entity.centerX, entity.centerY);
+        cam.centerOn(entity);
+        return cam;
+      }
+      centerOn(center) {
+        this.center = center;
+      }
+      centerView(screenX, screenY, screenWidth, screenHeight) {
+        this._centerX = this.center.centerX - (screenWidth / 2 + screenX);
+        this._centerY = this.center.centerY - (screenHeight / 2 + screenY);
+      }
+      get xOffset() {
+        return -this.centerX;
+      }
+      get yOffset() {
+        return -this.centerY;
+      }
+    }
+
+
+
+    // File: objects/terrain.ts
+
+    "use strict";
+    class Terrain extends CollidableRect {
+      draw(ctx) {
+        ctx.fillStyle = "green";
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+      }
+    }
+
+
+
+    // File: objects/biller.ts
+
+    "use strict";
+    // Ball + Killer = Biller
+    class Biller extends CollidableRect {
+      draw(ctx) {
+        ctx.fillStyle = "blue";
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+      }
+    }
+
+
+
+    // File: objects/lava.ts
+
+    "use strict";
+    class Lava extends CollidableRect {
+      draw(ctx) {
+        ctx.fillStyle = "red";
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+      }
+    }
+
+
+
+    // File: player/ball.ts
+
+    "use strict";
+    class Ball extends CollidableRect {
+      constructor() {
+        super(...arguments);
+        this.velocity = { x: 0, y: 0 };
+        this.color = "red";
+        this.dead = true;
+        this.startLifetime = 0;
+      }
+      get velocityX() { return this.velocity.x; }
+      get velocityY() { return this.velocity.y; }
+      get alive() { return !this.dead; }
+      draw(ctx) {
+        if (this.dead)
+          return;
+        ctx.fillStyle = this.color;
+        ctx.fillCircle(this.centerX, this.centerY, this.width / 2);
+      }
+      spawn(x, y, velocity) {
+        if (this.dead) {
+          this.x = x;
+          this.y = y;
+          this.velocity = { x: velocity.x * 10, y: velocity.y * 16 };
+          this.dead = false;
+          this.startLifetime = Ball.lifetime;
+        }
+      }
+      kill() {
+        this.dead = true;
+      }
+      slow() {
+        if (this.velocity.x > 0)
+          this.velocity.x -= 2;
+        else if (this.velocity.x < 0)
+          this.velocity.x += 2;
+        if (this.velocity.y > 0)
+          this.velocity.y -= 2;
+        else if (this.velocity.y < 0)
+          this.velocity.y += 2;
+        if (this.velocity.x == 0 && this.velocity.y == 0)
+          this.kill();
+      }
+      act(terrain) {
+        if (Ball.lifetime - this.startLifetime > 2)
+          this.kill();
+        if (this.dead)
+          return;
+        for (const obj of terrain) {
+          if (this.collidesWith(obj) && !(obj instanceof Player)) {
+            this.kill();
+            return;
+          }
+        }
+        // X
+        for (const obj of terrain) {
+          this.x += this.velocity.x * DELTA_TIME;
+          if (this.collidesWith(obj)) {
+            this.x -= this.velocity.x * DELTA_TIME;
+            this.slow();
+            if (obj instanceof Player)
+              obj.act({ x: this.velocity.x, y: 0 }, terrain, true);
+            else if (obj instanceof Biller) {
+              this.kill();
+              return;
+            }
+            this.velocity.x *= -1;
+            break;
+          }
+          else {
+            this.x -= this.velocity.x * DELTA_TIME;
+          }
+        }
+        this.x += this.velocity.x * DELTA_TIME;
+        // Y
+        for (const obj of terrain) {
+          this.y += this.velocity.y * DELTA_TIME;
+          if (this.collidesWith(obj)) {
+            this.y -= this.velocity.y * DELTA_TIME;
+            this.slow();
+            if (obj instanceof Player) {
+              if (this.velocity.y * obj.velocityY > 0) {
+                obj.act({ x: 0, y: this.velocity.y * -1 }, terrain, true);
+              }
+              else {
+                obj.act({ x: 0, y: this.velocity.y }, terrain, true);
+                this.velocity.y *= -1;
+              }
+            }
+            else if (obj instanceof Biller) {
+              this.kill();
+              return;
+            }
+            else
+              this.velocity.y *= -1;
+            break;
+          }
+          else {
+            this.y -= this.velocity.y * DELTA_TIME;
+          }
+        }
+        this.y += this.velocity.y * DELTA_TIME;
+      }
+    }
+    Ball.lifetime = 0;
+    setInterval(() => Ball.lifetime++, 1000);
+
+
+
+    // File: levels/exit.ts
+
+    "use strict";
+    class Exit extends CollidableRect {
+      constructor(x, y, width, height, connectedInstance, transportX, transportY) {
+        super(x, y, width, height);
+        this.connectedInstance = connectedInstance;
+        this.transportX = transportX;
+        this.transportY = transportY;
+      }
+      get instance() {
+        return this.connectedInstance;
+      }
+      get newX() { return this.transportX; }
+      get newY() { return this.transportY; }
+      draw(ctx) {
+        ctx.fillStyle = "black";
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+      }
+    }
+
+
+
+    // File: player/player.ts
+
+    "use strict";
+    var Direction;
+    (function (Direction) {
+      Direction[Direction["Up"] = 0] = "Up";
+      Direction[Direction["Down"] = 1] = "Down";
+      Direction[Direction["Left"] = 2] = "Left";
+      Direction[Direction["Right"] = 3] = "Right";
+      Direction[Direction["None"] = 4] = "None";
+    })(Direction || (Direction = {}));
+    const JUMP_INCREMENT_FIRST_HALF = 4;
+    const JUMP_INCREMENT_SECOND_HALF = 2;
+    const JUMP_MAX = 16;
+    const UP_GRAVITY = 1;
+    const DOWN_GRAVITY = 2;
+    const GROUND_FRICTION = 5;
+    const AIR_FRICTION = 1.9; // Erm
+    class Player extends CollidableRect {
+      constructor() {
+        super(...arguments);
+        this.velocity = { x: 0, y: 0 };
+        this.xDirection = Direction.Right;
+        this.yDirection = Direction.None;
+        this.hasJump = false;
+        this.onCeiling = false;
+        this.jumpHeld = false;
+        this.canHold = true;
+        this.ball = new Ball(0, 0, 20, 20);
+      }
+      get velocityX() { return this.velocity.x; }
+      get velocityY() { return this.velocity.y; }
+      getDirection() {
+        return this.yDirection == Direction.None ? this.xDirection : this.yDirection;
+      }
+      draw(ctx) {
+        ctx.fillStyle = "black";
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        ctx.fillStyle = "white";
+        if (this.getDirection() == Direction.Left || this.getDirection() == Direction.Right) {
+          ctx.fillRect(this.getDirection() == Direction.Right ? this.x + this.width * 3 / 4 : this.x + this.width / 8, this.y + this.height / 4, this.width / 8, this.height / 8);
+        }
+        else {
+          ctx.fillRect(this.x + this.width / 8, this.getDirection() == Direction.Up ? this.y + this.height / 8 : this.y + this.height * 3 / 4, this.width / 8, this.height / 8);
+          ctx.fillRect(this.x + this.width * 3 / 4, this.getDirection() == Direction.Up ? this.y + this.height / 8 : this.y + this.height * 3 / 4, this.width / 8, this.height / 8);
+        }
+        this.ball.draw(ctx);
+        if (!this.ball.alive) {
+          ctx.fillCircle(this.x + this.width / 2, this.y + this.height / 2, 5);
+        }
+      }
+      act(direction, terrain, fromBall) {
+        if (fromBall) {
+          if (direction.x != 0)
+            this.velocity.x = direction.x;
+          if (direction.y != 0)
+            this.velocity.y = direction.y;
+          this.hasJump = true;
+          return;
+        }
+        this.ball.act(terrain);
+        terrain = terrain.filter((obj) => !(obj instanceof Player));
+        this.velocity.x += direction.x * 5;
+        // Vertical
+        this.yDirection = Direction.None;
+        if (direction.y > 0)
+          this.yDirection = Direction.Up;
+        else if (direction.y < 0)
+          this.yDirection = Direction.Down;
+        // Horizontal
+        if (direction.x > 0)
+          this.xDirection = Direction.Right;
+        else if (direction.x < 0)
+          this.xDirection = Direction.Left;
+        // X
+        for (const obj of terrain) {
+          while (this.velocity.x != 0) {
+            this.x += this.velocity.x * DELTA_TIME;
+            if (this.collidesWith(obj)) {
+              this.x -= this.velocity.x * DELTA_TIME;
+              if (this.velocity.x > 0)
+                this.velocity.x--;
+              else
+                this.velocity.x++;
+            }
+            else {
+              this.x -= this.velocity.x * DELTA_TIME;
+              break;
+            }
+          }
+        }
+        this.x += this.velocity.x * DELTA_TIME;
+        if (this.velocity.x > 0)
+          this.velocity.x -= GROUND_FRICTION;
+        else if (this.velocity.x < 0)
+          this.velocity.x += GROUND_FRICTION;
+        if (this.velocity.x <= 2 && this.velocity.x >= -2)
+          this.velocity.x = 0;
+        let isOnGround = false;
+        this.onCeiling = false;
+        // Gravity
+        if (this.velocity.y < 0)
+          this.velocity.y += UP_GRAVITY;
+        else if (this.velocity.y < 15)
+          this.velocity.y += DOWN_GRAVITY;
+        // Y
+        for (const obj of terrain) {
+          while (this.velocity.y != 0) {
+            this.y += this.velocity.y * DELTA_TIME;
+            if (this.collidesWith(obj)) {
+              if (obj instanceof Lava)
+                return true;
+              this.y -= this.velocity.y * DELTA_TIME;
+              if (this.velocity.y > 0)
+                this.velocity.y--;
+              else {
+                this.velocity.y++;
+                this.onCeiling = true;
+              }
+              if (this.velocity.y == 0)
+                isOnGround = true;
+            }
+            else {
+              this.y -= this.velocity.y * DELTA_TIME;
+              break;
+            }
+          }
+        }
+        this.y += this.velocity.y * DELTA_TIME;
+        if (isOnGround)
+          this.hasJump = true;
+        return false;
+      }
+      jump() {
+        if (this.velocity.y > 0)
+          this.velocity.y = 0;
+        this.velocity.y -= this.velocity.y >= -JUMP_INCREMENT_FIRST_HALF ? JUMP_INCREMENT_FIRST_HALF : JUMP_INCREMENT_SECOND_HALF;
+        if (this.velocity.y <= -JUMP_MAX && !this.onCeiling) {
+          this.hasJump = false;
+          this.canHold = false;
+          this.jumpHeld = false;
+        }
+      }
+      jumpPressed() {
+        if (this.canHold)
+          this.jumpHeld = true;
+        if (this.hasJump && this.jumpHeld)
+          this.jump();
+        if (this.onCeiling)
+          this.canHold = true;
+      }
+      jumpReleased() {
+        this.jumpHeld = false;
+        this.hasJump = this.onCeiling;
+        this.canHold = true;
+      }
+      tp(x, y) {
+        this.x = x;
+        this.y = y;
+        this.velocity = { x: 0, y: 0 };
+        this.ball.kill();
+      }
+      shoot() {
+        const ballVel = {
+          x: this.yDirection != Direction.None ? 0 :
+                  (this.xDirection == Direction.Right ? 1 : -1),
+          y: this.yDirection == Direction.Up ? -1 :
+                  (this.yDirection == Direction.Down ? 1 : 0)
+        };
+        this.ball.spawn(ballVel.x < 0 ? this.x - this.ball.width :
+                (ballVel.x > 0 ? this.x + this.width + this.ball.width :
+                        this.x + this.width / 2 - this.ball.width / 2), ballVel.y < 0 ? this.y - this.ball.height :
+                (ballVel.y > 0 ? this.y + this.height + this.ball.height :
+                        this.y + this.height / 2 - this.ball.height / 2), ballVel);
+      }
+    }
+
+
+
+    // File: levels/level.ts
+
+    "use strict";
+    class Level {
+      constructor(_instances, _player) {
+        this._instances = _instances;
+        this._player = _player;
+        this._currentInstance = _instances[0];
+        this._startX = _player.x;
+        this._startY = _player.y;
+      }
+      get currentInstance() { return this._currentInstance; }
+      get player() { return this._player; }
+      get startX() { return this._startX; }
+      get startY() { return this._startY; }
+      draw() {
+        this.currentInstance.draw();
+      }
+      playerInExit(ignore = false) {
+        let exit = this.currentInstance.playerInExit(this.player);
+        if (exit !== null || ignore) {
+          if (ignore) {
+            if (this.currentInstance.getExits.length == 0)
+              return false;
+            exit = this.currentInstance.getExits[0];
+          }
+          if (exit.instance === undefined)
+            return true;
+          this._currentInstance = exit.instance;
+          this._player.tp(exit.newX, exit.newY);
+          this._startX = this.player.x;
+          this._startY = this.player.y;
+        }
+        return false;
+      }
+      static checkParams(obj, numParams) {
+        for (let i = 0; i < numParams; i++) {
+          if (typeof obj.params[i] == "number") {
+            if (obj.params[i].toString() == "NaN" && obj.params[i] === undefined)
+              return true;
+          }
+          else {
+            if (obj.params[i] == "" && obj.params[i] == undefined)
+              return true;
+          }
+        }
+        return false;
+      }
+      static fromLevelString(levelString, x, y, width, height, context) {
+        let player = undefined;
+        let camera = undefined;
+        let instances = [];
+        let instanceExits = [];
+        let playerLocals = [];
+        if (levelString.trim().length == 0 || levelString.trim() == "")
+          return "There is no input.";
+        // Get each instance string
+        const levelStrings = levelString.trim().split("\n\n\n");
+        // Create each instance
+        for (let i = 0; i < levelStrings.length; i++) {
+          // Get 0000 part and attr part
+          const parts = levelStrings[i].trim().split("\n\n");
+          const levelStr = parts[0];
+          // Get params
+          const attrStr = parts[1] === undefined ? "" : parts[1];
+          const matches = attrStr.matchAll(/(?<objType>[A-Z])\((?<params>[0-9, -"'A-Za-z.]+)\)/g);
+          const info = [];
+          for (const match of matches) {
+            const params = match.groups.params;
+            const newParams = params.split(",").map((val) => val.startsWith("\"") ? val.slice(1, val.length - 1) : parseInt(val.trim(), 10));
+            info.push({ objType: match.groups.objType, params: newParams });
+          }
+          let drawables = [];
+          let exits = [];
+          // Get objects
+          let X = 0, Y = 0;
+          for (const char of levelStr) {
+            switch (char) {
+              case "P":
+                if (player === undefined) {
+                  const indexP = info.findIndex((val) => val.objType == "P");
+                  if (indexP == -1)
+                    return "No player attributes (ex. 'P(30, 50)').";
+                  const objP = info.splice(indexP, 1)[0];
+                  if (Level.checkParams(objP, 2))
+                    return "Two attributes are required for player.";
+                  player = new Player(X, Y, objP.params[0], objP.params[1]);
+                }
+                else {
+                  playerLocals.push({ x: X, y: Y, sublevel: i });
+                }
+                break;
+              case "T":
+                drawables.push(new Terrain(X, Y, 100, 100));
+                break;
+              case "B":
+                drawables.push(new Biller(X, Y, 100, 100));
+                break;
+              case "L":
+                drawables.push(new Lava(X, Y, 100, 100));
+                break;
+              case "E":
+                const indexE = info.findIndex((val) => val.objType == "E");
+                if (indexE == -1)
+                  return "No exit attributes (ex. 'E(100, 100, 1)').";
+                const objE = info.splice(indexE, 1)[0];
+                if (Level.checkParams(objE, 3))
+                  return "Three attributes are required for exit.";
+                exits.push({ x: X, y: Y, w: objE.params[0], h: objE.params[1], i: objE.params[2], sublevel: i + 1 });
+                break;
+              case "S":
+                const indexS = info.findIndex((val) => val.objType == "S");
+                if (indexS == -1)
+                  return "No text attributes (ex. 'S(\"Hello World\", 50, 0)').";
+                const objS = info.splice(indexS, 1)[0];
+                if (Level.checkParams(objS, 3))
+                  return "Three attributes are required for text.";
+                drawables.push(new GameText(objS.params[0], X + objS.params[1], Y + objS.params[2]));
+                break;
+              case "\n":
+                Y += 100;
+                X = -100;
+                break;
+              default:
+                break;
+            }
+            X += 100;
+          }
+          if (camera === undefined) {
+            if (player === undefined)
+              return "No player.";
+            camera = Camera.fromRect(player);
+          }
+          drawables.push(player);
+          const instance = new Instance(x, y, width, height, context, camera, ...drawables);
+          instanceExits.push(exits);
+          instances.push(instance);
+        }
+        function getPlayerLocal(sublevel) {
+          for (const o of playerLocals)
+            if (sublevel == o.sublevel)
+              return o;
+          return { x: 0, y: 0 };
+        }
+        for (let i = 0; i < instances.length; i++) {
+          instances[i].addExits(...instanceExits[i].map((obj) => new Exit(obj.x, obj.y, obj.w, obj.h, instances[obj.i], getPlayerLocal(obj.sublevel).x, getPlayerLocal(obj.sublevel).y)));
+        }
+        return new Level(instances, player);
+      }
+    }
+
+
+
+    // File: levels/instance.ts
+
+    "use strict";
+    class Instance {
+      constructor(x, y, width, height, ctx, camera, ...drawables) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.ctx = ctx;
+        this.camera = camera;
+        this.exits = [];
+        this.drawables = drawables;
+      }
+      get getExits() { return this.exits; }
+      addDrawables(...drawables) {
+        this.drawables = this.drawables.concat(drawables);
+      }
+      addExits(...exits) {
+        this.exits = this.exits.concat(exits);
+      }
+      draw() {
+        this.ctx.clearRect(this.x, this.y, this.width, this.height);
+        this.camera.centerView(this.x, this.y, this.width, this.height);
+        this.ctx.xOffset = this.camera.xOffset;
+        this.ctx.yOffset = this.camera.yOffset;
+        for (const obj of this.drawables) {
+          obj.draw(this.ctx);
+        }
+        for (const exit of this.exits) {
+          exit.draw(this.ctx);
+        }
+      }
+      playerInExit(player) {
+        for (const exit of this.exits) {
+          if (player.collidesWith(exit)) {
+            return exit;
+          }
+        }
+        return null;
+      }
+      // Oop
+      getNextInstance() {
+        for (const exit of this.exits) {
+          return exit.instance;
+        }
+      }
+      get collidables() {
+        return this.drawables.filter((obj) => "collidesWith" in obj);
+      }
+    }
+
+
+
+    // File: levels/levels.ts
+
+    "use strict";
+    const LEVELS = [
+      // Level 1-1
+      `
+TTTTTTTTTTTTTT
+T000000000000T
+T000000000000T
+TE00000000000T
+T0TT0TT00TT0TT
+T000000000000T
+T000000000S0TT
+T00S00T00T0T
+T00S0TTS0TLT
+TP00TTT00T
+TTTTTTTTTT
+
+S("Watch out for lava", 50, 0)
+S("Welcome to Janker", 0, 50)
+S("WASD to move and space to jump", 0, 50)
+S("R to restart the level", 100, 50)
+P(30, 50)
+E(100, 200, 1)`,
+      // Level 1-2
+      `
+LLLLLLLLLLLLLLLL
+L00000000000000L
+L00000000000000L
+L00000000000000LLLLLLLL
+L00000000000T000000000L
+L00000000000T000000000L
+L000000000T0TLLT000000L
+L00TT00TTTTTTTTTTTTT00L
+L00000000000T000000000L
+LT0000000000T000000000L
+LTT000000000T000000000L
+L000TT0000P0T00E000T00L
+LLLLLLLTTTT0T00BTTLLLLL
+0000000000B0T00B
+0000000000B0000B
+0000000000B0000B
+0000000000B0000B
+0000000000B0000B
+0000000000BLLLLB
+
+P(30, 50)
+E(100, 100, 1)`,
+      // Level 2-1
+      `
+TTTTTLLTTTT
+TPL000000ET
+T000T00TTTT
+TT0TT00T
+T0S0000T
+T000000T
+TLLLLLLT
+
+P(30, 50)
+E(100, 100, 1)
+S("You can jump until you touch the ground", 100, 100)`,
+      // Level 2-2
+      `
+0000000000000000000TTTTTT
+0000000000000000000TL000T
+TTTTLTTTLTTLTTTTLTTT000ET
+T000000000000000L00000TTT
+T000000000000000000000T
+T0T000T000000T0000T000T
+T000S00000000000000000T
+T0P0000000000000000000T
+TTTLLLTLLLLLLTLLLLTLLLT
+
+P(30, 50)
+E(100, 100, 1)
+S("Stick to ceilings by holding jump", 50, 150)`,
+      // Level 3-1
+      `
+TLLLLLLLLLLLTTT
+T00000000000LEL
+T00000000000L0LS
+T00000000000L0L
+T0TT0000TT00L0L
+T0T00S000T00L0L
+TPT00S000TT0L0L
+TTT00S000T0000L
+00TLLLLLLTTTTTT
+
+P(30, 50)
+E(100, 100, 1)
+S("I wish I could wall jump...", 150, 50);
+S("Press shift to shoot a ball", 0, 100)
+S("towards where you're looking", 0, 50)
+S("and bounce or jump off it", 0, 0)`,
+      // Level 3-2
+      `
+BLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLB
+B000000000000000000000000000000B
+B000000000000000000000000000000B
+B0P000000000000000000000000000EB
+BTT0T00T000T0000T00000T000000TTB
+B000000000000000000000000000000B
+B000000000000000000000000000000B
+BLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLB
+
+P(30, 50)
+E(100, 100, 1)`,
+      // Level 3-3
+      `
+TTTTTTT00000000TLLLLLLLLLLLT
+T00000L00000000T00000000L00T
+T000S0L00000000T000000T0000T
+T0P000L00000000T000000T0000T
+TTTT00LLLLLLLLLT00000000L0ET
+T00T00000000000T00000TTTTTTT
+T00T00000000000T00000B
+T00T00000000000000000B
+T0000000000TTTTTT0000B
+T0000000000LLT00TBBBBB
+T000000000000T
+T000000000000T
+T000000000000T
+T000000000000T
+TBBBBBBBBBBBBT
+
+P(30, 50)
+E(100, 100, 1)
+S("Down then hella right", 50, 50)`,
+      // Level 4-1
+      `
+TTTTTTTTTTT
+TP000L000ET
+TTT00L00TTT
+00T00L00T
+0T000L000T
+T0000L0000T
+T0000L0000T
+T0000L0000T
+TLL00L00TTT
+T0000L0000T
+T0000L0000T
+T000LLL000T
+T0000L0000T
+T0000L0000T
+T0000L0000T
+T0LL0L0TT0T
+T0000L0000T
+T0000L0000T
+T0000L0000T
+TL00LLL00LT
+T0000L0000T
+T0000L0000T
+T00LLLLL00T
+T000000000T
+TE000TTTTTT
+
+P(30, 50)
+E(100, 100, 1)
+E(400, 100, 1)`,
+      // Level 4-2
+      `
+TTTTTTTTTTT
+T0000L000ET
+TTT00L00TTT
+00T00L00T
+0T000L000T
+T0000L0000T
+T0000L0000T
+T0000L0000T
+TLL00L00TTT
+T0000L0000T
+T0000L0000T
+T000LLL000T
+T0000L0000T
+T0000L0000T
+T0000L0000T
+T0LL0L0TT0T
+T0000L0000T
+T0000L0000T
+T0000L0000T
+TL00LLL00LT
+T0000L0000T
+T0000L0000T
+T00LLLLL00T
+T00000P000T
+TTTTTTTTTTT
+
+P(30, 50)
+E(100, 100, 1)`,
+      // Level 5-1
+      `
+TTTTTTTTTBBBBTTT
+T00000000000B00T
+T00000000000B0ET
+T0LLLLLLT000B0TT
+T0L00000L000B0TTTLBBBBBT
+T0L00000L000B0000L00000T
+T0L00000L000B0000000000T
+T0L000L0L000B0000000000T
+T0L000L0B000LLLLL0LLL00T
+T0L0L0L0B000L0000000000T
+T0L000L0B000L0000000000T
+T0L000L0B000L0000000000T
+T0L000L0BP00L0BB00000TTT
+T00000L0BBBBL0LLLLLLLT
+T0TTTTT0000000L
+T0T000BBBBBBBBL
+TLT
+
+P(30, 50)
+E(100, 100, 1)`,
+    ];
+
+
+
+    // File: util/keyboard.ts
+
+    "use strict";
+    class KeyboardClass {
+      constructor() {
+        this.key_up_functions = [];
+        this.shiftDown = false;
+        this.keys = new Map();
+        window.addEventListener("keydown", (event) => {
+          if (event.key == "Shift") {
+            this.shiftDown = true;
+            this.keys.set(event.key, { down: true, upperCase: false });
+            return;
+          }
+          this.keys.set(event.key.toLowerCase(), { down: true, upperCase: this.shiftDown });
+        });
+        window.addEventListener("keyup", (event) => {
+          if (event.key == "Shift") {
+            this.shiftDown = false;
+            this.keys.set(event.key, { down: false, upperCase: false });
+            return;
+          }
+          const k = this.keys.get(event.key.toLowerCase()).upperCase && event.key.length == 1 ? event.key.toUpperCase() : event.key.toLowerCase();
+          for (const func of this.key_up_functions)
+            func(k);
+          this.keys.set(event.key.toLowerCase(), { down: false, upperCase: this.shiftDown });
+        });
+      }
+      addKeyUpFunc(func) {
+        this.key_up_functions.push(func);
+      }
+      match_keys_down(func) {
+        Array.from(this.keys.entries())
+                .filter((pair) => {
+                  return pair[1].down;
+                })
+                .forEach((pair) => {
+                  func(pair[1].upperCase && pair[0].length == 1 ? pair[0].toUpperCase() : pair[0]);
+                });
+      }
+      match_keys_up(func) {
+        Array.from(this.keys.entries())
+                .filter((pair) => {
+                  return !pair[1].down;
+                })
+                .forEach((pair) => {
+                  this.keys.delete(pair[0]);
+                  func(pair[1].upperCase && pair[0].length == 1 ? pair[0].toUpperCase() : pair[0]);
+                });
+      }
+    }
+    const Keyboard = new KeyboardClass();
+
+
+
+    // File: util/button.ts
+
+    "use strict";
+    class Button extends Rect {
+      static clickEvent(event) {
+        for (const button of Button.buttons) {
+          if (!button.isActive)
+            continue;
+          if (event.pageX - Button.canvasOffset.x < button.x + button.width &&
+                  event.pageX - Button.canvasOffset.x > button.x &&
+                  event.pageY - Button.canvasOffset.y < button.y + button.height &&
+                  event.pageY - Button.canvasOffset.y > button.y) {
+            if (button.clickFunc !== undefined)
+              button.clickFunc({ x: event.pageX - Button.canvasOffset.x, y: event.pageY - Button.canvasOffset.y });
+          }
+          else if (button.clickOffFunc !== undefined)
+            button.clickOffFunc({ x: event.pageX - Button.canvasOffset.x, y: event.pageY - Button.canvasOffset.y });
+        }
+      }
+      get clickFunc() {
+        return this.onClickFunc;
+      }
+      get clickOffFunc() {
+        return this.onClickOffFunc;
+      }
+      get isActive() {
+        return this.active;
+      }
+      constructor(text, x, y, width, height) {
+        super(x, y, width, height);
+        this.text = text;
+        this.onClickFunc = undefined;
+        this.onClickOffFunc = undefined;
+        this.active = false;
+        Button.buttons.push(this);
+      }
+      setText(t) {
+        this.text = t;
+      }
+      getText() {
+        return this.text;
+      }
+      changeDimensions(x, y, width, height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+      }
+      activate() {
+        this.active = true;
+      }
+      deactivate() {
+        this.active = false;
+      }
+      draw(ctx) {
+        ctx.fillStyle = "blue";
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        ctx.fillStyle = "black";
+        ctx.fillText(this.text, this.x + this.width / 2, this.y + this.height / 2);
+      }
+      onClickHook(func) {
+        this.onClickFunc = func;
+      }
+      onClickOffHook(func) {
+        this.onClickOffFunc = func;
+      }
+    }
+    Button.buttons = [];
+    Button.canvasOffset = { x: 0, y: 0 };
+    window.addEventListener("mouseup", Button.clickEvent);
+
+
+
+    // File: util/textbox.ts
+
+    "use strict";
+    const CURSOR_ADD_X = 12;
+    const CURSOR_ADD_Y = 20;
+    const CURSOR_START_X = 10;
+    const CURSOR_START_Y = 10;
+    class TextBox extends Button {
+      constructor(x, y, width, height) {
+        super("", x, y, width, height);
+        this.canType = false;
+        this.charCount = 0;
+        this.charCounted = "";
+        this.arrowCount = 0;
+        this.arrowCounted = "";
+        this.cursorIndex = { x: 0, y: 0 };
+        this.lines = [""];
+        this.showCursor = true;
+        Keyboard.addKeyUpFunc((key) => {
+          if (key == this.charCounted) {
+            this.charCount = 0;
+            this.charCounted = "";
+          }
+          else if (key == this.arrowCounted) {
+            this.arrowCount = 0;
+            this.arrowCounted = "";
+          }
+        });
+        super.onClickHook((pos) => {
+          this.canType = true;
+          const _x = Math.floor((pos.x - this.x - CURSOR_START_X) / CURSOR_ADD_X);
+          const _y = Math.floor((pos.y - this.y - CURSOR_START_Y) / CURSOR_ADD_Y);
+          this.cursorIndex.y = Math.min(_y, this.lines.length - 1);
+          if (_y > this.lines.length - 1)
+            this.cursorIndex.x = this.lines[this.cursorIndex.y].length;
+          else
+            this.cursorIndex.x = Math.min(_x, this.lines[this.cursorIndex.y].length);
+        });
+        super.onClickOffHook(() => {
+          this.canType = false;
+        });
+        const cursorShowerThing = () => {
+          this.showCursor = !this.showCursor;
+          if (this.showCursor)
+            setTimeout(cursorShowerThing, 400);
+          else
+            setTimeout(cursorShowerThing, 500);
+        };
+        cursorShowerThing();
+      }
+      handleArrowKeyDelay(key) {
+        if (key == this.arrowCounted) {
+          this.arrowCount++;
+          if (this.arrowCount < 30)
+            return true;
+        }
+        else {
+          this.arrowCounted = key;
+          this.arrowCount = 0;
+        }
+        return false;
+      }
+      draw(ctx) {
+        if (this.canType) {
+          let exit = false;
+          Keyboard.match_keys_down((key) => {
+            switch (key) {
+              case "arrowright":
+                if (this.handleArrowKeyDelay(key))
+                  break;
+                if (this.cursorIndex.x == this.lines[this.cursorIndex.y].length) {
+                  if (this.cursorIndex.y < this.lines.length - 1) {
+                    this.cursorIndex.x = 0;
+                    this.cursorIndex.y++;
+                  }
+                }
+                else
+                  this.cursorIndex.x++;
+                break;
+              case "arrowleft":
+                if (this.handleArrowKeyDelay(key))
+                  break;
+                if (this.cursorIndex.x == 0) {
+                  if (this.cursorIndex.y > 0) {
+                    this.cursorIndex.y--;
+                    this.cursorIndex.x = this.lines[this.cursorIndex.y].length;
+                  }
+                }
+                else
+                  this.cursorIndex.x--;
+                break;
+              case "arrowdown":
+                if (this.handleArrowKeyDelay(key))
+                  break;
+                if (this.cursorIndex.y == this.lines.length - 1) {
+                  this.cursorIndex.x = this.lines[this.cursorIndex.y].length;
+                }
+                else {
+                  this.cursorIndex.y++;
+                  this.cursorIndex.x = Math.min(this.lines[this.cursorIndex.y].length, this.cursorIndex.x);
+                }
+                break;
+              case "arrowup":
+                if (this.handleArrowKeyDelay(key))
+                  break;
+                if (this.cursorIndex.y == 0) {
+                  this.cursorIndex.x = 0;
+                }
+                else {
+                  this.cursorIndex.y--;
+                  this.cursorIndex.x = Math.min(this.lines[this.cursorIndex.y].length, this.cursorIndex.x);
+                }
+                break;
+              default:
+                if (!exit)
+                  exit = this.updateText(key);
+                break;
+            }
+          });
+        }
+        ctx.fillStyle = "blue";
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        ctx.fillStyle = "black";
+        ctx.textAlign = "start";
+        ctx.textFont = "Courier New, monospace";
+        ctx.fontSize = 20;
+        for (let i = 0; i < this.lines.length; i++)
+          ctx.fillText(this.lines[i], this.x + 10, this.y + 20 * (i + 1));
+        ctx.textAlign = "center";
+        ctx.textFont = "Arial";
+        ctx.fontSize = 30;
+        if (this.showCursor && this.canType)
+          ctx.fillRect(this.x + this.cursorIndex.x * CURSOR_ADD_X + CURSOR_START_X, this.y + this.cursorIndex.y * CURSOR_ADD_Y + CURSOR_START_Y, 2, 20);
+      }
+      updateText(t) {
+        if (t != "backspace" && t != "enter" && t.length != 1)
+          return false;
+        if (t == this.charCounted) {
+          this.charCount++;
+          if (this.charCount < 30)
+            return true;
+        }
+        else {
+          this.charCounted = t;
+          this.charCount = 0;
+        }
+        if (t == "backspace" && (this.lines.length > 1 || this.lines[0].length > 0)) {
+          if (this.cursorIndex.x == 0) {
+            if (this.cursorIndex.y > 0) {
+              const line = this.lines[this.cursorIndex.y];
+              this.lines.splice(this.cursorIndex.y, 1);
+              this.cursorIndex.y--;
+              this.cursorIndex.x = this.lines[this.cursorIndex.y].length;
+              this.lines[this.cursorIndex.y] += line;
+            }
+            else {
+              if (this.lines[0].length == 0)
+                this.lines.shift();
+              else
+                this.lines[0] = this.lines[0].slice(1, this.lines[0].length);
+            }
+          }
+          else {
+            this.lines[this.cursorIndex.y] =
+                    this.lines[this.cursorIndex.y].slice(0, this.cursorIndex.x - 1) + this.lines[this.cursorIndex.y].slice(this.cursorIndex.x, this.lines[this.cursorIndex.y].length);
+            this.cursorIndex.x--;
+          }
+        }
+        else if (t == "enter") {
+          const end = this.lines[this.cursorIndex.y].slice(this.cursorIndex.x, this.lines[this.cursorIndex.y].length);
+          this.lines[this.cursorIndex.y] = this.lines[this.cursorIndex.y].slice(0, this.cursorIndex.x);
+          this.cursorIndex.y++;
+          this.cursorIndex.x = 0;
+          this.lines.splice(this.cursorIndex.y, 0, end);
+        }
+        else if (t.length == 1) {
+          this.lines[this.cursorIndex.y] =
+                  this.lines[this.cursorIndex.y].slice(0, this.cursorIndex.x) + t +
+                  this.lines[this.cursorIndex.y].slice(this.cursorIndex.x, this.lines[this.cursorIndex.y].length);
+          this.cursorIndex.x++;
+        }
+        else
+          return false;
+        return true;
+      }
+      setText(text) {
+        this.lines = text.split("\n");
+        this.cursorIndex.x = this.lines[this.lines.length - 1].length;
+        this.cursorIndex.y = this.lines.length;
+      }
+      getText() {
+        return this.lines.join("\n");
+      }
+    }
+
+
+
+    // File: screens/screens.ts
+
+    "use strict";
+    class TitleScreen {
+      constructor(ctx) {
+        this.gameState = GameState.TITLE;
+        this.context = new DrawingContext2D(ctx, "black");
+        this.context.fontSize = 40;
+        this.width = ctx.canvas.width;
+        this.height = ctx.canvas.height;
+        this.playButton = new Button("Play", this.width / 2 - 75, this.height / 2 - 50, 150, 100);
+        this.playButton.onClickHook(() => {
+          this.gameState = GameState.LEVEL_SELECT;
+        });
+        this.editorButton = new Button("Level Editor", this.width / 2 - 125, this.height / 2 + 75, 250, 100);
+        this.editorButton.onClickHook(() => {
+          this.gameState = GameState.LEVEL_EDITOR;
+        });
+      }
+      getGameState() {
+        return this.gameState;
+      }
+      draw() {
+        this.context.fillStyle = "black";
+        this.context.fillText("Janker", this.width / 2, this.height / 2 - 100);
+        this.playButton.draw(this.context);
+        this.editorButton.draw(this.context);
+        this.context.fillText(`v${VERSION}`, this.width - 100, this.height - 50);
+      }
+      activate() {
+        this.playButton.activate();
+        this.editorButton.activate();
+      }
+      deactivate() {
+        this.playButton.deactivate();
+        this.editorButton.activate();
+      }
+      reset() {
+        this.gameState = GameState.TITLE;
+        this.context.fontSize = 40;
+      }
+    }
+    class LevelSelectScreen {
+      constructor(ctx) {
+        this.gameState = GameState.LEVEL_SELECT;
+        this.levelButtons = [];
+        this.selectedLevel = null;
+        this.context = new DrawingContext2D(ctx, "black");
+        this.context.fontSize = 40;
+        this.width = ctx.canvas.width;
+        this.height = ctx.canvas.height;
+        const cols = 5;
+        const rows = Math.ceil(LEVELS.length / cols);
+        const width = (this.width - 50 * (cols + 1)) / cols;
+        const height = (this.height - 50 * (rows + 1)) / rows;
+        for (let i = 0; i < LEVELS.length; i++) {
+          this.levelButtons.push(new Button("Level " + (i + 1), (i % cols + 1) * 50 + i % cols * width, (Math.floor(i / cols) + 1) * 50 + Math.floor(i / cols) * height, width, height));
+          this.levelButtons[i].onClickHook(() => {
+            this.selectedLevel = i;
+            this.gameState = GameState.LEVEL;
+          });
+        }
+        this.backButton = new Button("<-", 0, 0, 50, 50);
+        this.backButton.onClickHook(() => {
+          this.gameState = GameState.TITLE;
+        });
+      }
+      getGameState() {
+        return this.gameState;
+      }
+      getSelectedLevelIndex() {
+        return this.selectedLevel;
+      }
+      draw() {
+        for (const button of this.levelButtons)
+          button.draw(this.context);
+        this.backButton.draw(this.context);
+      }
+      activate() {
+        for (const button of this.levelButtons)
+          button.activate();
+        this.backButton.activate();
+      }
+      deactivate() {
+        for (const button of this.levelButtons)
+          button.deactivate();
+        this.backButton.deactivate();
+      }
+      reset() {
+        this.gameState = GameState.LEVEL_SELECT;
+        this.selectedLevel = null;
+        this.context.fontSize = 40;
+      }
+    }
+    const INFO = `Level Editor Documentation
+
+There are two parts to a level: the layout and the attributes.
+They are seperated by a line.
+You can have multiple levels connected via exits (E).
+
+%
+LEVEL PART 1 LAYOUT
+
+LEVEL PART 1 ATTRIBUTES
+
+
+LEVEL PART 2 LAYOUT
+
+LEVEL PART 2 ATTRIBUTES
+%
+
+Characters that will not be taken as empty space:
+T: Terrain, no attributes
+L: Lava, no attributes
+B: Ball Killer Terrain, no attributes
+P: Player, width & height
+E: Exit, width & height & index of next level part (first part is 0)
+S: Text, text & x offest & y offset
+
+Example:
+TTTTTTTTTTTTTT
+T000000000000T
+T000000000000T
+TE00000000000T
+T0TT0TT00TT0TT
+T000000000000T
+T000000000S0TT
+T00S00T00T0T
+T00S0TTS0TLT
+TP00TTT00T
+TTTTTTTTTT
+
+S("Watch out for lava", 50, 0)
+S("Welcome to Janker", 0, 50)
+S("WASD to move and space to jump", 0, 50)
+S("R to restart the level", 100, 50)
+P(30, 50)
+E(100, 200, 1)
+`;
+    const INFO_LINES = INFO.split("\n");
+    class LevelEditorScreen {
+      constructor(ctx) {
+        this.gameState = GameState.LEVEL_EDITOR;
+        this.currentLevel = undefined;
+        this.errorText = "";
+        this.showInfo = false;
+        this.gameActive = false;
+        this.context = new DrawingContext2D(ctx, "black");
+        this.context.fontSize = 40;
+        this.width = ctx.canvas.width;
+        this.height = ctx.canvas.height;
+        this.textbox = new TextBox(50, 50, this.width / 2 - 50, this.height - 100);
+        this.copyButton = new Button("Copy", this.textbox.width / 2 - 100, 0, 100, 50);
+        this.copyButton.onClickHook(() => {
+          navigator.clipboard.writeText(this.textbox.getText()).then();
+        });
+        this.pasteButton = new Button("Paste", this.textbox.width / 2, 0, 100, 50);
+        this.pasteButton.onClickHook(() => {
+          navigator.clipboard.readText().then(text => {
+            this.textbox.setText(text);
+          });
+        });
+        this.deleteButton = new Button("Delete", this.textbox.width / 2 + 100, 0, 100, 50);
+        this.deleteButton.onClickHook(() => {
+          this.textbox.setText("");
+        });
+        this.updateButton = new Button("Update", this.textbox.width / 2 - 100, this.textbox.y + this.textbox.height, 150, 50);
+        this.updateButton.onClickHook(() => {
+          const l = Level.fromLevelString(this.textbox.getText(), this.width / 2 + 50, 0, this.width / 2 - 50, this.height, new DrawingContext2D(ctx, "black"));
+          if (typeof l == "string") {
+            this.errorText = l;
+            this.currentLevel = undefined;
+          }
+          else {
+            this.errorText = "";
+            this.currentLevel = l;
+          }
+          this.showInfo = false;
+          this.infoButton.setText("Info");
+        });
+        this.infoButton = new Button("Info", this.textbox.width / 2 + 50, this.textbox.y + this.textbox.height, 150, 50);
+        this.infoButton.onClickHook(() => {
+          if (this.showInfo) {
+            this.showInfo = false;
+            this.infoButton.setText("Info");
+          }
+          else {
+            this.showInfo = true;
+            this.infoButton.setText("Close");
+          }
+        });
+        this.gameOverlayButton = new Button("", this.width / 2 + 50, 0, this.width / 2, this.height);
+        this.gameOverlayButton.onClickHook(() => {
+          this.gameActive = true;
+        });
+        this.gameOverlayButton.onClickOffHook(() => {
+          this.gameActive = false;
+        });
+        this.hideButton = new Button("<", 0, this.height / 2 - 25, 50, 50);
+        this.hideButton.onClickHook(() => {
+          if (this.hideButton.getText() == "<") {
+            this.hideButton.setText(">");
+            this.showInfo = false;
+            this.infoButton.setText("Info");
+            const l = this.currentLevel = Level.fromLevelString(this.textbox.getText(), 50, 0, this.width - 50, this.height, new DrawingContext2D(ctx, "black"));
+            if (typeof l == "string") {
+              this.errorText = l;
+              this.currentLevel = undefined;
+            }
+            else {
+              this.errorText = "";
+              this.currentLevel = l;
+            }
+            this.gameOverlayButton.changeDimensions(50, 0, this.width - 50, this.height);
+          }
+          else {
+            this.hideButton.setText("<");
+            const l = Level.fromLevelString(this.textbox.getText(), this.width / 2 + 50, 0, this.width / 2 - 50, this.height, new DrawingContext2D(ctx, "black"));
+            if (typeof l == "string") {
+              this.errorText = l;
+              this.currentLevel = undefined;
+            }
+            else {
+              this.errorText = "";
+              this.currentLevel = l;
+            }
+            this.gameOverlayButton.changeDimensions(this.width / 2 + 50, 0, this.width / 2, this.height);
+          }
+        });
+        this.backButton = new Button("<-", 0, 0, 50, 50);
+        this.backButton.onClickHook(() => {
+          this.gameState = GameState.TITLE;
+        });
+      }
+      getGameState() {
+        return this.gameState;
+      }
+      draw() {
+        this.context.clearRect(0, 0, this.width, this.height);
+        if (this.hideButton.getText() == "<") {
+          if (!this.showInfo) {
+            if (this.currentLevel !== undefined) {
+              this.context.fontSize = 20;
+              this.currentLevel.draw();
+              this.context.fontSize = 40;
+              this.context.clearRect(0, 0, this.width / 2 + 50, this.height);
+            }
+            else
+              this.context.fillText(this.errorText, this.width * 3 / 4, this.height / 2);
+          }
+          else {
+            this.context.fontSize = 16;
+            this.context.textAlign = "start";
+            for (let i = 0; i < INFO_LINES.length; i++) {
+              this.context.fillText(INFO_LINES[i], 150 + this.textbox.width, 50 + i * 15);
+            }
+            this.context.fontSize = 40;
+            this.context.textAlign = "center";
+          }
+          this.textbox.draw(this.context);
+          this.copyButton.draw(this.context);
+          this.pasteButton.draw(this.context);
+          this.deleteButton.draw(this.context);
+          this.updateButton.draw(this.context);
+          this.infoButton.draw(this.context);
+        }
+        else {
+          if (this.currentLevel !== undefined) {
+            this.context.fontSize = 20;
+            this.currentLevel.draw();
+            this.context.fontSize = 40;
+            this.context.clearRect(0, 0, 50, this.height);
+          }
+          else
+            this.context.fillText(this.errorText, this.width / 2, this.height / 2);
+        }
+        this.hideButton.draw(this.context);
+        this.backButton.draw(this.context);
+      }
+      activate() {
+        this.textbox.activate();
+        this.copyButton.activate();
+        this.pasteButton.activate();
+        this.deleteButton.activate();
+        this.updateButton.activate();
+        this.infoButton.activate();
+        this.gameOverlayButton.activate();
+        this.hideButton.activate();
+        this.backButton.activate();
+      }
+      deactivate() {
+        this.textbox.deactivate();
+        this.copyButton.deactivate();
+        this.pasteButton.deactivate();
+        this.deleteButton.deactivate();
+        this.updateButton.deactivate();
+        this.infoButton.deactivate();
+        this.gameOverlayButton.deactivate();
+        this.hideButton.deactivate();
+        this.backButton.deactivate();
+      }
+      reset() {
+        this.gameState = GameState.LEVEL_EDITOR;
+        this.context.fontSize = 40;
+        this.currentLevel = undefined;
+        this.errorText = "";
+        this.infoButton.setText("Info");
+        this.showInfo = false;
+        this.gameActive = false;
+        this.hideButton.setText("<");
+      }
+      get player() {
+        return this.currentLevel !== undefined && this.gameActive ? this.currentLevel.player : undefined;
+      }
+      get level() {
+        return this.currentLevel;
+      }
+    }
+
+
+
+    // File: main.ts
+
+    "use strict";
+    const VERSION = "0.1.0"; // TODO ALWAYS CHANGE THIS
+    var GameState;
+    (function (GameState) {
+      GameState[GameState["TITLE"] = 0] = "TITLE";
+      GameState[GameState["LEVEL_SELECT"] = 1] = "LEVEL_SELECT";
+      GameState[GameState["LEVEL"] = 2] = "LEVEL";
+      GameState[GameState["LEVEL_EDITOR"] = 3] = "LEVEL_EDITOR";
+    })(GameState || (GameState = {}));
+    let DELTA_TIME = 1; // Erm, next patch... probably
+    function main() {
+      const canvas = document.getElementById("canvas");
+      Button.canvasOffset.x = canvas.offsetLeft;
+      Button.canvasOffset.y = canvas.offsetTop;
+      if (canvas === null) {
+        alert("Canvas with id 'canvas'does not exist.");
+        return;
+      }
+      const ctx = canvas.getContext("2d");
+      if (ctx === null) {
+        alert("2d context cannot be gotten.");
+        return;
+      }
+      let gameState = GameState.TITLE;
+      const titleScreen = new TitleScreen(ctx);
+      titleScreen.activate();
+      titleScreen.draw();
+      const levelSelectScreen = new LevelSelectScreen(ctx);
+      const levelEditorScreen = new LevelEditorScreen(ctx);
+      let level;
+      let player;
+      function render(now) {
+        switch (gameState) {
+          case GameState.TITLE:
+            if (titleScreen.getGameState() == GameState.LEVEL_SELECT) {
+              gameState = GameState.LEVEL_SELECT;
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              titleScreen.deactivate();
+              levelSelectScreen.activate();
+              levelSelectScreen.reset();
+              levelSelectScreen.draw();
+            }
+            else if (titleScreen.getGameState() == GameState.LEVEL_EDITOR) {
+              gameState = GameState.LEVEL_EDITOR;
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              titleScreen.deactivate();
+              levelEditorScreen.activate();
+              levelEditorScreen.reset();
+              levelEditorScreen.draw();
+            }
+            break;
+          case GameState.LEVEL_SELECT:
+            if (levelSelectScreen.getGameState() == GameState.LEVEL && levelSelectScreen.getSelectedLevelIndex() !== null) {
+              gameState = GameState.LEVEL;
+              level = Level.fromLevelString(LEVELS[levelSelectScreen.getSelectedLevelIndex()], 0, 0, canvas.width, canvas.height, new DrawingContext2D(ctx, "black"));
+              if (typeof level == "string") {
+                console.log(level);
+                return;
+              }
+              player = level.player;
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              levelSelectScreen.deactivate();
+            }
+            else if (levelSelectScreen.getGameState() == GameState.TITLE) {
+              gameState = GameState.TITLE;
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              levelSelectScreen.deactivate();
+              titleScreen.activate();
+              titleScreen.reset();
+              titleScreen.draw();
+            }
+            break;
+          case GameState.LEVEL:
+            let direction = { x: 0, y: 0 };
+            Keyboard.match_keys_down((key) => {
+              switch (key.toLowerCase()) {
+                case "d":
+                case "arrowright":
+                  direction.x += 1;
+                  break;
+                case "a":
+                case "arrowleft":
+                  direction.x += -1;
+                  break;
+                case "w":
+                case "arrowup":
+                  direction.y += 1;
+                  break;
+                case " ":
+                  player.jumpPressed();
+                  break;
+                case "s":
+                case "arrowdown":
+                  direction.y += -1;
+                  break;
+                case "shift":
+                  player.shoot();
+                  break;
+                default:
+                  break;
+              }
+            });
+            Keyboard.match_keys_up((key) => {
+              switch (key.toLowerCase()) {
+                case "m":
+                  level.playerInExit(true);
+                  break;
+                case "r":
+                  player.tp(level.startX, level.startY);
+                  break;
+                case " ":
+                  player.jumpReleased();
+                  break;
+                default:
+                  break;
+              }
+            });
+            if (player.act(direction, level.currentInstance.collidables)) {
+              player.tp(level.startX, level.startY);
+            }
+            if (level.playerInExit()) {
+              gameState = GameState.LEVEL_SELECT;
+              level = undefined;
+              player = undefined;
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              levelSelectScreen.activate();
+              levelSelectScreen.reset();
+              levelSelectScreen.draw();
+            }
+            else
+              level.draw();
+            break;
+          case GameState.LEVEL_EDITOR:
+            if (levelEditorScreen.getGameState() == GameState.TITLE) {
+              gameState = GameState.TITLE;
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              levelEditorScreen.deactivate();
+              titleScreen.activate();
+              titleScreen.reset();
+              titleScreen.draw();
+              break;
+            }
+            if (levelEditorScreen.player !== undefined) {
+              let direction2 = { x: 0, y: 0 };
+              Keyboard.match_keys_down((key) => {
+                switch (key.toLowerCase()) {
+                  case "d":
+                  case "arrowright":
+                    direction2.x += 1;
+                    break;
+                  case "a":
+                  case "arrowleft":
+                    direction2.x += -1;
+                    break;
+                  case "w":
+                  case "arrowup":
+                    direction2.y += 1;
+                    break;
+                  case " ":
+                    levelEditorScreen.player.jumpPressed();
+                    break;
+                  case "s":
+                  case "arrowdown":
+                    direction2.y += -1;
+                    break;
+                  case "shift":
+                    levelEditorScreen.player.shoot();
+                    break;
+                  default:
+                    break;
+                }
+              });
+              Keyboard.match_keys_up((key) => {
+                switch (key.toLowerCase()) {
+                  case "m":
+                    levelEditorScreen.level.playerInExit(true);
+                    break;
+                  case "r":
+                    levelEditorScreen.player.tp(levelEditorScreen.level.startX, levelEditorScreen.level.startY);
+                    break;
+                  case " ":
+                    levelEditorScreen.player.jumpReleased();
+                    break;
+                  default:
+                    break;
+                }
+              });
+              if (levelEditorScreen.player.act(direction2, levelEditorScreen.level.currentInstance.collidables) || levelEditorScreen.level.playerInExit()) {
+                levelEditorScreen.player.tp(levelEditorScreen.level.startX, levelEditorScreen.level.startY);
+              }
+            }
+            levelEditorScreen.draw();
+            break;
+        }
+        requestAnimationFrame(render);
+      }
+      requestAnimationFrame(render);
+    }
+    main();
+  </script>
+</body>
+</html>

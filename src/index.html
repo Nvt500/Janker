@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Janker</title>
+        <meta id="js" content="">
+    </head>
+
+    <body>
+        <canvas id="canvas" width="1280px" height="720px" style="border: 2px solid black;"></canvas>
+
+        <!-- I'd like to organize the script imports, but it gives an error so... -->
+
+        <script type="text/typescript" src="typescript/interfaces/entity.ts"></script>
+        <script type="text/typescript" src="typescript/interfaces/drawable.ts"></script>
+        <script type="text/typescript" src="typescript/util/context.ts"></script>
+        <script type="text/typescript" src="typescript/objects/text.ts"></script>
+
+        <script type="text/typescript" src="typescript/interfaces/rect.ts"></script>
+        <script type="text/typescript" src="typescript/interfaces/circle.ts"></script>
+
+        <script type="text/typescript" src="typescript/interfaces/collidable.ts"></script>
+        <script type="text/typescript" src="typescript/util/camera.ts"></script>
+        <script type="text/typescript" src="typescript/objects/terrain.ts"></script>
+        <script type="text/typescript" src="typescript/objects/biller.ts"></script>
+        <script type="text/typescript" src="typescript/objects/lava.ts"></script>
+        <script type="text/typescript" src="typescript/player/ball.ts"></script>
+        <script type="text/typescript" src="typescript/levels/exit.ts"></script>
+        <script type="text/typescript" src="typescript/player/player.ts"></script>
+        <script type="text/typescript" src="typescript/levels/level.ts"></script>
+
+        <script type="text/typescript" src="typescript/levels/instance.ts"></script>
+        <script type="text/typescript" src="typescript/levels/levels.ts"></script>
+        <script type="text/typescript" src="typescript/util/keyboard.ts"></script>
+        <script type="text/typescript" src="typescript/util/button.ts"></script>
+        <script type="text/typescript" src="typescript/util/textbox.ts"></script>
+        <script type="text/typescript" src="typescript/screens/screens.ts"></script>
+        <script type="text/typescript" src="typescript/main.ts"></script>
+        
+        <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/typescript@5.9.3/lib/typescript.min.js"></script>
+        <script type="text/javascript" src="typescript.compile.dev.js"></script>
+
+        <span>
+            <input type="button" value="Copy JS" onclick="navigator.clipboard.writeText(document.getElementById('js').content);" />
+            <input type="button" value="Hide" onclick="this.parentNode.hidden = 'true';" />
+        </span>
+    </body>
+
+</html>
+
