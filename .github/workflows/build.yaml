@@ -33,7 +33,7 @@ jobs:
           $first_line = $firstMatch | Where-Object { $_ -match '^##\s+(\d+\.\d+\.\d+)' } | Select-Object -First 1
           $version = $matches[1]
           
-          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "version=v$version" >> $env:GITHUB_OUTPUT
 
       - name: Create Release
         uses: actions/create-release@v1
