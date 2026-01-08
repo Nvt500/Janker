@@ -1,0 +1,53 @@
+name: Build and Create Release for Janker
+
+on:
+  push:
+    paths:
+      - src/**
+      - .github/workflows/**
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: get_body_and_version
+        run: |
+          $lines = Get-Content CHANGELOG.md
+          $firstMatch = $lines | Where-Object { $_ -match '^##\s+\d+\.\d+\.\d+' } | Select-Object -First 1
+          $start = $lines.IndexOf($firstMatch)
+
+          $rest = $lines[($start + 1)..($lines.Count - 1)]
+          $nextMatch = $rest | Where-Object { $_ -match '^##\s+\d+\.\d+\.\d+' } | Select-Object -First 1
+          $end = if ($nextMatch) { $lines.IndexOf($nextMatch) - 1 } else { $lines.Count - 1 }
+
+          $latest = $lines[$start..$end]
+          $text = $latest -join "`n"
+
+          echo "body<<EOF" >> $env:GITHUB_OUTPUT
+          echo "$text" >> $env:GITHUB_OUTPUT
+          echo "EOF" >> $env:GITHUB_OUTPUT
+          
+          $first_line = $firstMatch | Where-Object { $_ -match '^##\s+(\d+\.\d+\.\d+)' } | Select-Object -First 1
+          $version = $matches[1]
+          
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_body_and_version.outputs.version }}
+          release_name: ${{ steps.get_body_and_version.outputs.version }}
+          body: |
+            ${{ steps.get_body_and_version.outputs.body }}
+
+      - name: Upload to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          file: docs/index.html
+          tag: ${{ steps.get_body_and_version.outputs.version }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
